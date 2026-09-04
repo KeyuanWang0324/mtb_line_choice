@@ -65,6 +65,57 @@ MTBCoach 有 IMU 动作检测但只有 GPS 级定位。
 
 ---
 
+## 代码
+
+```bash
+pip install -e ".[viz,dev]"
+mtbline demo --plot gate1.png     # 合成数据端到端，无需 GPU、无需素材
+pytest -q                          # 29 tests
+python scripts/resolution_sweep.py # 分辨率极限实验
+```
+
+`demo` 跑的是合成赛道，**只验证分析层**（中心线拟合 / `(s,d)` 投影 / Gate 判定），
+不验证 DA3 能不能重建森林、hloc 能不能把糊掉的骑行视频配准进去——那正是 Gate 1 要测的东西。
+
+### 模块状态
+
+| 模块 | 作用 | 状态 |
+|---|---|---|
+| `frenet.py` | `(s, d, h)` 投影 —— 项目的核心表示 | ✅ 已测试 |
+| `centerline.py` | 从轨迹束拟合主曲线中心线 | ✅ 已测试 |
+| `evaluate.py` | Gate 判定 + **自动发现决策点** | ✅ 已测试 |
+| `types.py` | `TrailSegment` 存取 | ✅ 已测试 |
+| `localize.py` | COLMAP 模型 → `Trajectory` | ✅ 已测试 |
+| `video.py` | 抽帧 + 按清晰度筛选（运动模糊是主要杀手） | ⚠️ 需 ffmpeg |
+| `telemetry.py` | GoPro GPMF → 尺度 / 重力 / 速度 | ⚠️ 需 GoPro 素材 |
+| `reconstruct.py` | Depth Anything 3 适配器 | ❌ **未验证**（本机无 CUDA） |
+
+`localize.py` 刻意**不**封装 hloc：hloc/COLMAP 由人直接跑（命令写在模块 docstring 里），
+代码只负责把它们的输出转成 `Trajectory`——那才是容易出微妙错误、值得测试的部分。
+
+---
+
+## 已经跑出来的结论
+
+`scripts/resolution_sweep.py` 在合成数据上扫了「分叉大小 × 重定位漂移 × 样本数」：
+
+- **Gate 1a（~2m 分叉）离极限还很远**。即使重定位漂移到 0.5m 仍然 100% 正确分组。
+  → **如果真实 Gate 1a 失败，原因一定在重建或重定位，不在分析层。**
+- **Gate 1b（~30cm）是另一类问题，而且加数据救不了**。逐条准确率卡在 ~93% 不动，
+  因为在这个尺度上**分叉比车手自身的摆动还小**（0.30m vs 0.35m）——大约每 14 条里有 1 条，
+  车手是真的骑到了另一边。这不是工程误差，这是这项运动本身。
+
+**产品后果（重要）**：30cm 尺度上只能做群体陈述，不能做个体陈述。
+
+> ✅ 「这段最快的一批车手，内线比其他人多切约 30cm」
+> ❌ 「你这里走错线了」
+
+个体归因只在分离量大于车手摆动时才站得住——按这个模型大约是 **0.6m 以上**。
+**采集目标随之改为每段 ≥10 条（每支 5 条），不是原计划的 3 条。**
+
+---
+
 ## 文档
 
 - [`docs/research_2026-09-04.md`](docs/research_2026-09-04.md) — 完整调研：产品事实核查、四大瓶颈拆解、组件清单、风险、参考来源
+- [`docs/next_steps.md`](docs/next_steps.md) — 执行计划：Gate 顺序修正、Spike 做法、算力与许可、行动清单

@@ -1,0 +1,24 @@
+[project]
+name = "mtb-line-choice"
+version = "0.1.0"
+description = "Recover per-rider 3D lines from onboard MTB video and compare them in trail coordinates"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
+
+[project.optional-dependencies]
+viz = ["matplotlib>=3.7"]
+telemetry = ["py-gpmf-parser>=0.0.4"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+mtbline = "mtb_line.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
