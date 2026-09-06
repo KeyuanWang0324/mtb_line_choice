@@ -4,11 +4,29 @@ UNVALIDATED: written against DA3's documented CLI but not executed, because the
 development machine has no CUDA device. Treat the first real run as part of
 Gate 0, not as a regression.
 
-Model choice is a licensing decision, not only a quality one. DA3-SMALL, DA3-BASE
-and DA3METRIC-LARGE are Apache-2.0; the larger and nested variants are CC BY-NC
-4.0 and cannot ship in a product. The default here is the largest Apache-2.0
-metric model, so that a passing Gate 0 does not have to be re-run on a different
-model later.
+Model choice is constrained from two directions at once, and they nearly
+eliminate the field. Verified against the released checkpoints on 2026-09-05:
+
+    model              poses?   metric?   licence
+    DA3-SMALL          yes      no        Apache-2.0
+    DA3-BASE           yes      no        Apache-2.0
+    DA3-LARGE          yes      no        CC BY-NC 4.0
+    DA3METRIC-LARGE    NO       yes       Apache-2.0
+    DA3-GIANT          yes      no        CC BY-NC 4.0
+
+DA3METRIC-LARGE returns `extrinsics=None`: it is a monocular metric-depth model
+and does no multi-view pose estimation at all. Since this pipeline needs camera
+trajectories above everything else, "Apache-2.0 and metric" is not an option --
+only DA3-SMALL and DA3-BASE are both pose-capable and commercially usable, and
+neither is metric.
+
+That is what makes `telemetry.py` load-bearing rather than a convenience: with
+no metric model available under a usable licence, scale has to come from GoPro
+GPMF or ARKit, every time.
+
+UNVALIDATED: this adapter has been imported and run on Apple Silicon (MPS), but
+its *geometric accuracy* on real trail footage is untested -- see
+docs/findings_2026-09-05.md. Treat the first real run as part of Gate 0.
 """
 
 from __future__ import annotations
@@ -21,8 +39,11 @@ import numpy as np
 
 from mtb_line.types import Reconstruction
 
-APACHE_MODELS = {"da3-small", "da3-base", "da3metric-large"}
-DEFAULT_MODEL = "da3metric-large"
+# Apache-2.0 AND able to return camera extrinsics. DA3METRIC-LARGE is
+# Apache-2.0 but returns no poses, so it is deliberately absent.
+POSE_CAPABLE_APACHE = {"da3-small", "da3-base"}
+NO_POSE_MODELS = {"da3metric-large", "da3mono-large"}
+DEFAULT_MODEL = "da3-base"
 
 
 def da3_available() -> bool:
@@ -76,17 +97,25 @@ def reconstruct(
     export: str = "ply",
 ) -> Reconstruction:
     """Run `da3 auto` over a frame directory and load the exported geometry."""
+    if model.lower() in NO_POSE_MODELS:
+        raise ValueError(
+            f"{model!r} is a monocular depth model and returns no camera extrinsics, "
+            "so it cannot produce the trajectories this pipeline is built on. Use one "
+            f"of {sorted(POSE_CAPABLE_APACHE)}."
+        )
+    if model.lower() not in POSE_CAPABLE_APACHE and not allow_noncommercial:
+        raise ValueError(
+            f"{model!r} is CC BY-NC 4.0 and cannot be used in a product. Pick one of "
+            f"{sorted(POSE_CAPABLE_APACHE)}, or pass allow_noncommercial=True for a "
+            "research-only comparison."
+        )
+
     if not da3_available():
         raise RuntimeError(
             "`da3` not on PATH. Install Depth Anything 3 "
-            "(https://github.com/ByteDance-Seed/Depth-Anything-3) on a CUDA host; "
-            "DA3-Streaming needs under 12GB VRAM, so a single 4090 or A10 is enough."
-        )
-    if model.lower() not in APACHE_MODELS and not allow_noncommercial:
-        raise ValueError(
-            f"{model!r} is CC BY-NC 4.0 and cannot be used in a product. Pick one of "
-            f"{sorted(APACHE_MODELS)}, or pass allow_noncommercial=True for a "
-            "research-only comparison."
+            "(https://github.com/ByteDance-Seed/Depth-Anything-3). It runs on Apple "
+            "Silicon via MPS as well as CUDA -- see docs/findings_2026-09-05.md for "
+            "the macOS install, which needs --no-deps to skip xformers."
         )
 
     frames_dir, out_dir = Path(frames_dir), Path(out_dir)
