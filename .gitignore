@@ -7,3 +7,6 @@ data/
 *.MP4
 *.ply
 *.splat
+*.egg-info/
+build/
+dist/
