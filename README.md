@@ -95,7 +95,8 @@ python scripts/resolution_sweep.py # 分辨率极限实验
 | `localize.py` | COLMAP 模型 → `Trajectory` | ✅ 已测试 |
 | `video.py` | 抽帧 + 按清晰度筛选（运动模糊是主要杀手） | ⚠️ 需 ffmpeg |
 | `telemetry.py` | GoPro GPMF → 尺度 / 重力 / 速度 | ⚠️ 需 GoPro 素材 |
-| `reconstruct.py` | Depth Anything 3 适配器 | ❌ **未验证**（本机无 CUDA） |
+| `reconstruct.py` | Depth Anything 3 适配器 | ⚠️ **已跑通**（MPS，~0.05s/帧）；**几何精度未验证** |
+| `scripts/render_synthetic_trail.py` | 带真值位姿的合成赛道渲染器 | ✅ 可用 |
 
 `localize.py` 刻意**不**封装 hloc：hloc/COLMAP 由人直接跑（命令写在模块 docstring 里），
 代码只负责把它们的输出转成 `Trajectory`——那才是容易出微妙错误、值得测试的部分。
@@ -126,3 +127,20 @@ python scripts/resolution_sweep.py # 分辨率极限实验
 
 - [`docs/research_2026-09-04.md`](docs/research_2026-09-04.md) — 完整调研：产品事实核查、四大瓶颈拆解、组件清单、风险、参考来源
 - [`docs/next_steps.md`](docs/next_steps.md) — 执行计划：Gate 顺序修正、Spike 做法、算力与许可、行动清单
+- [`docs/findings_2026-09-05.md`](docs/findings_2026-09-05.md) — **实测记录**：DA3 在 Apple Silicon 上跑通（不必租 GPU）、macOS 安装的四个坑、模型能力×许可矩阵、位姿精度仍未验证
+
+---
+
+## 当前状态
+
+| 问题 | 状态 |
+|---|---|
+| DA3 能否在本机跑 | ✅ 能，MPS，~0.05 s/帧 —— **短片段不必租 GPU** |
+| 哪个模型可商用且出位姿 | ✅ 只有 DA3-SMALL / DA3-BASE（`DA3METRIC-LARGE` **不出位姿**） |
+| 尺度从哪来 | ✅ 只能靠 GPMF / ARKit —— 所以 `telemetry.py` 是必需件不是可选件 |
+| 分析层（中心线 / `(s,d)` / Gate 判定） | ✅ 29 tests，合成数据端到端通过 |
+| DA3 位姿精度够不够 | ❌ **未验证**，需真实素材 |
+| hloc 重定位是否可行 | ❌ 未测 |
+| **Gate 1 能否成立** | ❌ 未测 —— **仍是项目核心风险** |
+
+**最硬的阻塞项是素材的合规获取路径**，不是技术。
